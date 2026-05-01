@@ -566,18 +566,30 @@ pub fn broadcast_shreds(
     // Forward shreds to external receivers, avoiding duplicates when addresses
     // overlap. Add the cluster multicast address only when the route is present
     // and the address is not already added.
+    //
+    // Send each shred to all receivers before moving to the next shred, so that
+    // no receiver has a structural latency advantage based on its position in
+    // the address list.
+    let capacity = usize::from(shredstream_receiver_address.is_some())
+        + shred_receiver_addresses.len()
+        + usize::from(multicast_receiver_address.is_some());
+    let mut all_receiver_addrs = Vec::with_capacity(capacity);
     if let Some(addr) = shredstream_receiver_address {
-        packets.extend(shreds.iter().map(|shred| (shred.payload(), *addr)));
+        all_receiver_addrs.push(*addr);
     }
-    let external_receiver_addrs = shred_receiver_addresses
-        .iter()
-        .chain(multicast_receiver_address.iter().filter(|addr| {
-            !shred_receiver_addresses.contains(addr)
-                && shred_receiver_addresses.len() < MAX_SHRED_RECEIVER_ADDRESSES
-        }))
-        .filter(|addr| Some(**addr) != *shredstream_receiver_address);
-    for &addr in external_receiver_addrs {
-        packets.extend(shreds.iter().map(|shred| (shred.payload(), addr)));
+    all_receiver_addrs.extend(
+        shred_receiver_addresses
+            .iter()
+            .chain(multicast_receiver_address.iter().filter(|addr| {
+                !shred_receiver_addresses.contains(addr)
+                    && shred_receiver_addresses.len() < MAX_SHRED_RECEIVER_ADDRESSES
+            }))
+            .filter(|addr| Some(**addr) != *shredstream_receiver_address)
+            .copied(),
+    );
+    packets.reserve(shreds.len() * all_receiver_addrs.len());
+    for shred in shreds.iter() {
+        packets.extend(all_receiver_addrs.iter().map(|&addr| (shred.payload(), addr)));
     }
 
     shred_select.stop();
@@ -894,4 +906,5 @@ pub mod test {
             .join()
             .expect("Expect successful join of broadcast service");
     }
+
 }
