@@ -619,8 +619,8 @@ pub fn broadcast_shreds(
     // (shredstream, `--shred-receiver-address`, BAM, and multicast), avoiding duplicates when
     // addresses overlap. Add the cluster multicast address only when the route is present.
     let external_packets_start = all_packets.len();
-    for &addr in external_addrs.iter() {
-        for shred in shreds {
+    for shred in shreds {
+        for &addr in external_addrs.iter() {
             all_packets.push((shred.payload(), addr));
         }
     }
